@@ -125,7 +125,7 @@ func (dp *DevicePlugin) Start() error {
 		return fmt.Errorf("failed to listen on socket: %v", err)
 	}
 
-	klog.Infof("gRPC socket established at %s/%s", pluginapi.DevicePluginPath, dp.socket)
+	klog.Infof("gRPC socket established at %s", dp.socket)
 
 	grpcServer := grpc.NewServer()
 	pluginapi.RegisterDevicePluginServer(grpcServer, dp)
