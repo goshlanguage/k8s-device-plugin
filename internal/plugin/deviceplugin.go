@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"path"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 
 const (
 	resourceDomain = "tenstorrent.com/"
-	socketName     = "kubelet.sock"
+	socketName     = "tenstorrent.sock"
 )
 
 // DevicePlugin should conform to the DevicePluginServer Interface as seen here:
@@ -32,6 +33,7 @@ type DevicePlugin struct {
 	pluginapi.UnimplementedDevicePluginServer
 
 	devices []*pluginapi.Device
+	socket  string
 }
 
 // NewDevicePlugin should enumerate a hosts' tenstorrent devices
@@ -44,6 +46,7 @@ func NewDevicePlugin() *DevicePlugin {
 			{ID: "2", Health: pluginapi.Healthy},
 			{ID: "3", Health: pluginapi.Healthy},
 		},
+		socket: path.Join(pluginapi.DevicePluginPath, socketName),
 	}
 }
 
@@ -132,10 +135,13 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 	return nil
 }
 
-
+// Start initiates the gRPC server for the device plugin
 func (dp *DevicePlugin) Start() error {
+	// Remove if exists
+	os.Remove(dp.socket)
+
 	// Start gRPC server
-	sock, err := net.Listen("unix", pluginapi.KubeletSocket)
+	sock, err := net.Listen("unix", dp.socket)
 	if err != nil {
 		return fmt.Errorf("failed to listen on socket: %v", err)
 	}
