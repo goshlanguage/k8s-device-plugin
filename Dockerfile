@@ -14,6 +14,6 @@ WORKDIR /src/cmd/k8s-device-plugin
 
 RUN go build -o /device-plugin .
 
-FROM cgr.dev/chainguard/wolfi-base:latest
+FROM gcr.io/distroless/static-debian13:latest
 COPY --from=build /device-plugin /device-plugin
 CMD ["ls"]
