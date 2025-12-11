@@ -9,11 +9,8 @@ RUN go mod download
 # Copy the entire project
 COPY . .
 
-# Set working directory to the binary entrypoint
-WORKDIR /src/cmd/k8s-device-plugin
+RUN CGO_ENABLED=0 GOOS=linux go build -o device-plugin ./cmd/k8s-device-plugin
 
-RUN go build -o /device-plugin .
-
-FROM gcr.io/distroless/static-debian13:latest
-COPY --from=build /device-plugin /device-plugin
+FROM scratch
+COPY --from=build /src/device-plugin /device-plugin
 ENTRYPOINT ["/device-plugin"]
