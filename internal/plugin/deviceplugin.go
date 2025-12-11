@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	status "google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
@@ -132,4 +133,47 @@ func (dp *DevicePlugin) Start() error {
 	go grpcServer.Serve(sock)
 
 	return dp.Register(pluginapi.KubeletSocket)
+}
+
+func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
+	conn, err := dp.dial()
+	if err != nil {
+		return err
+	}
+
+	client := pluginapi.NewRegistrationClient(conn)
+
+	req := &pluginapi.RegisterRequest{
+		Version:      pluginapi.Version,
+		Endpoint:     path.Base(pluginapi.KubeletSocket),
+		ResourceName: fmt.Sprintf("%s/n150", resourceDomain),
+	}
+
+	klog.Info("Registering with kubelet...")
+	_, err = client.Register(context.Background(), req)
+	if err != nil {
+		return fmt.Errorf("failed to register with kubelet: %v", err)
+	}
+
+	return nil
+}
+
+// dial is a helper function that establishes gRPC communication with the kubelet
+func (dp *DevicePlugin) dial() (*grpc.ClientConn, error) {
+	connectParams := grpc.ConnectParams{
+		MinConnectTimeout: 1 * time.Second,
+	}
+
+	conn, err := grpc.NewClient(
+		fmt.Sprintf("unix://%s", pluginapi.KubeletSocket),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithConnectParams(connectParams),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	defer conn.Close()
+
+	return conn, nil
 }
