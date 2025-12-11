@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"path"
 	"time"
 
@@ -12,26 +11,27 @@ import (
 
 	"google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	"k8s.io/klog/v2"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
 const (
 	resourceDomain = "tenstorrent.com/"
-	socketName     = "tenstorrent.sock"
+	socketName     = "kubelet.sock"
 )
 
-// DevicePlugin should conform to the expected API
-// Expected methods can be found here:
-// 		 https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-implementation
+// DevicePlugin should conform to the DevicePluginServer Interface as seen here:
 //     https://github.com/kubernetes/kubelet/blob/v0.34.3/pkg/apis/deviceplugin/v1beta1/api_grpc.pb.go#L264
 //
-// See the upstream at
-//     https://github.com/kubernetes/kubelet/blob/master/pkg/apis/deviceplugin/v1beta1/api.proto
+// Conceptual documentation for device plugins can be found on the kubernetes docs:
+// 		 https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-implementation
+//
+// Lastly, the original design doc can be of benefit when conceptualizing the operational flow of a device plugin:
+//     https://github.com/kubernetes/design-proposals-archive/blob/main/resource-management/device-plugin.md
 type DevicePlugin struct {
 	pluginapi.UnimplementedDevicePluginServer
 
 	devices []*pluginapi.Device
-	socket  string
 }
 
 // NewDevicePlugin should enumerate a hosts' tenstorrent devices
@@ -44,7 +44,6 @@ func NewDevicePlugin() *DevicePlugin {
 			{ID: "2", Health: pluginapi.Healthy},
 			{ID: "3", Health: pluginapi.Healthy},
 		},
-		socket: path.Join(pluginapi.DevicePluginPath, socketName),
 	}
 }
 
@@ -59,12 +58,21 @@ func (dp *DevicePlugin) GetDevicePluginOptions(context.Context, *pluginapi.Empty
 // returns the new list
 func (dp *DevicePlugin) ListAndWatch(e *pluginapi.Empty, stream pluginapi.DevicePlugin_ListAndWatchServer) error {
 	for {
-		fmt.Println("ListAndWatch: sending device list")
+		klog.Info("ListAndWatch: sending device list")
 		if err := stream.Send(&pluginapi.ListAndWatchResponse{Devices: dp.devices}); err != nil {
 			return err
 		}
 		time.Sleep(5 * time.Second)
 	}
+}
+
+// GetPreferredAllocation returns a preferred set of devices to allocate
+// from a list of available ones. The resulting preferred allocation is not
+// guaranteed to be the allocation ultimately performed by the
+// devicemanager. It is only designed to help the devicemanager make a more
+// informed allocation decision when possible.
+func (dp *DevicePlugin) GetPreferredAllocation(context.Context, *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetPreferredAllocation not implemented")
 }
 
 // Allocate is called during container creation so that the Device
@@ -111,11 +119,11 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 
 	req := &pluginapi.RegisterRequest{
 		Version:      pluginapi.Version,
-		Endpoint:     path.Base(dp.socket),
+		Endpoint:     path.Base(pluginapi.KubeletSocket),
 		ResourceName: fmt.Sprintf("%s/n150", resourceDomain),
 	}
 
-	fmt.Println("Registering with kubelet...")
+	klog.Info("Registering with kubelet...")
 	_, err = client.Register(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("failed to register with kubelet: %v", err)
@@ -124,18 +132,10 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 	return nil
 }
 
-func (dp *DevicePlugin) GetPreferredAllocation(context.Context, *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetPreferredAllocation not implemented")
-}
 
 func (dp *DevicePlugin) Start() error {
-	// Remove old socket
-	if err := os.Remove(dp.socket); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
 	// Start gRPC server
-	sock, err := net.Listen("unix", dp.socket)
+	sock, err := net.Listen("unix", pluginapi.KubeletSocket)
 	if err != nil {
 		return fmt.Errorf("failed to listen on socket: %v", err)
 	}
@@ -145,10 +145,5 @@ func (dp *DevicePlugin) Start() error {
 
 	go grpcServer.Serve(sock)
 
-	// Wait for server to be ready
-	time.Sleep(time.Second)
-
-	// Register with kubelet via Kubelet's registration socket
-	kubeletEndpoint := path.Join(pluginapi.DevicePluginPath, pluginapi.KubeletSocket)
-	return dp.Register(kubeletEndpoint)
+	return dp.Register(pluginapi.KubeletSocket)
 }
