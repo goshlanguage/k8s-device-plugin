@@ -39,10 +39,10 @@ sequenceDiagram
 ## Roadmap
 
 - [ ] Enumerate the hardware
-  - [ ] a fake list at first
+  - [x] a fake list at first
   - [ ] actual hardware
-- [ ] Implement the gRPC server for the Kubernetes Device Plugin API
-  - [ ] [Register](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-registration)
-- [ ] Register with kubelet via the Unix socket
-- [ ] Return something valid from `Allocate()` ()
+- [?] Implement the gRPC server for the Kubernetes Device Plugin API
+  - [?] [Register](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-registration)
+- [?] Register with kubelet via the Unix socket
+- [?] Return something valid from `Allocate()` ()
 - [ ] Test E2E ([see Example](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#example-pod))

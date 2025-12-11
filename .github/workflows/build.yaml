@@ -1,0 +1,34 @@
+name: Build and publish image
+
+on: 
+  push:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: goshlanguage
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and push
+        id: docker_build
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          tags: |
+            ghcr.io/goshlanguage/k8s-device-plugin:latest
+            ghcr.io/goshlanguage/k8s-device-plugin:${{ github.sha }}
+          platforms: linux/amd64,linux/arm64,linux/riscv64

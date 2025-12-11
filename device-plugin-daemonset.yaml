@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: tenstorrent-device-plugin
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: tenstorrent-device-plugin
+  template:
+    metadata:
+      labels:
+        app: tenstorrent-device-plugin
+    spec:
+      priorityClassName: system-node-critical
+      tolerations:
+      - key: CriticalAddonsOnly
+        operator: Exists
+      containers:
+      - name: dp
+        image: ghcr.io/goshlanguage/k8s-device-plugin:latest
+        securityContext:
+          privileged: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: dev
+          mountPath: /dev
+        - name: deviceplugin
+          mountPath: /var/lib/kubelet/device-plugins
+        - name: sys
+          mountPath: /sys
+      volumes:
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: deviceplugin
+        hostPath:
+          path: /var/lib/kubelet/device-plugins
+      - name: sys
+        hostPath:
+          path: /sys
