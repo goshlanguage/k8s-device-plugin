@@ -32,6 +32,7 @@ const (
 type DevicePlugin struct {
 	pluginapi.UnimplementedDevicePluginServer
 
+	ctx     context.Context
 	devices []*pluginapi.Device
 	socket  string
 }
@@ -40,6 +41,7 @@ type DevicePlugin struct {
 // TODO: Remove this stub
 func NewDevicePlugin() *DevicePlugin {
 	return &DevicePlugin{
+		ctx: context.Background(),
 		devices: []*pluginapi.Device{
 			{ID: "0", Health: pluginapi.Healthy},
 			{ID: "1", Health: pluginapi.Healthy},
@@ -111,30 +113,6 @@ func (dp *DevicePlugin) PreStartContainer(context.Context, *pluginapi.PreStartCo
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
-func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
-	conn, err := grpc.Dial(kubeletEndpoint, grpc.WithInsecure(), grpc.WithBlock(), grpc.WithTimeout(5*time.Second))
-	if err != nil {
-		return fmt.Errorf("failed to dial kubelet: %v", err)
-	}
-	defer conn.Close()
-
-	client := pluginapi.NewRegistrationClient(conn)
-
-	req := &pluginapi.RegisterRequest{
-		Version:      pluginapi.Version,
-		Endpoint:     path.Base(pluginapi.KubeletSocket),
-		ResourceName: fmt.Sprintf("%s/n150", resourceDomain),
-	}
-
-	klog.Info("Registering with kubelet...")
-	_, err = client.Register(context.Background(), req)
-	if err != nil {
-		return fmt.Errorf("failed to register with kubelet: %v", err)
-	}
-
-	return nil
-}
-
 // Start initiates the gRPC server for the device plugin
 func (dp *DevicePlugin) Start() error {
 	// Remove if exists
@@ -145,6 +123,8 @@ func (dp *DevicePlugin) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to listen on socket: %v", err)
 	}
+
+	klog.Infof("gRPC socket established at %s/%s", pluginapi.DevicePluginPath, dp.socket)
 
 	grpcServer := grpc.NewServer()
 	pluginapi.RegisterDevicePluginServer(grpcServer, dp)
