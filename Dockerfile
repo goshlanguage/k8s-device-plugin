@@ -1,4 +1,6 @@
-FROM golang:1.25 as build
+# Important to note, using golang:1.25 or other images can have unanticipated side effects in other architectures like arm64
+#   If you change this and the build breaks, its because there are toolchain inconsistencies across images per achitecture
+FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS build
 
 WORKDIR /src
 
