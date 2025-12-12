@@ -6,7 +6,6 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the entire project
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o device-plugin ./cmd/k8s-device-plugin/main.go

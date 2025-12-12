@@ -149,7 +149,9 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 		ResourceName: fmt.Sprintf("%s/n150", resourceDomain),
 	}
 
-	klog.Info("Registering with kubelet...")
+	klog.Infof("Registering with kubelet on endpoint %s", req.Endpoint)
+	klog.Infof("Registering resource %s", req.ResourceName)
+	klog.Infof("Registering with device plugin API version %s", req.Version)
 	_, err = client.Register(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("failed to register with kubelet: %v", err)
@@ -161,11 +163,13 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 // dial is a helper function that establishes gRPC communication with the kubelet
 func (dp *DevicePlugin) dial() (*grpc.ClientConn, error) {
 	connectParams := grpc.ConnectParams{
-		MinConnectTimeout: 1 * time.Second,
+		MinConnectTimeout: 5 * time.Second,
 	}
 
+	kubeletSocketEndpoint := fmt.Sprintf("unix://%s", pluginapi.KubeletSocket)
+
 	conn, err := grpc.NewClient(
-		fmt.Sprintf("unix://%s", pluginapi.KubeletSocket),
+		kubeletSocketEndpoint,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithConnectParams(connectParams),
 	)
@@ -174,6 +178,9 @@ func (dp *DevicePlugin) dial() (*grpc.ClientConn, error) {
 	}
 
 	defer conn.Close()
+
+	klog.Infof("grpc connection created with endpoint %s", kubeletSocketEndpoint)
+	klog.Infof("grpc state %s", conn.GetState().String())
 
 	return conn, nil
 }
