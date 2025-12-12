@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	resourceDomain = "tenstorrent.com/"
+	resourceDomain = "tenstorrent.com"
 	socketName     = "tenstorrent.sock"
 )
 
