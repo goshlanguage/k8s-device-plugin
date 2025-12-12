@@ -140,6 +140,7 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 
 	client := pluginapi.NewRegistrationClient(conn)
 
@@ -176,8 +177,6 @@ func (dp *DevicePlugin) dial() (*grpc.ClientConn, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	defer conn.Close()
 
 	klog.Infof("grpc connection created with endpoint %s", kubeletSocketEndpoint)
 	klog.Infof("grpc state %s", conn.GetState().String())
