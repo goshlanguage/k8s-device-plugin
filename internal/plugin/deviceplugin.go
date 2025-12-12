@@ -145,7 +145,7 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 
 	req := &pluginapi.RegisterRequest{
 		Version:      pluginapi.Version,
-		Endpoint:     path.Base(kubeletEndpoint),
+		Endpoint:     kubeletEndpoint,
 		ResourceName: fmt.Sprintf("%s/n150", resourceDomain),
 	}
 
