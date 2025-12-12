@@ -23,13 +23,16 @@ const (
 )
 
 // DevicePlugin should conform to the DevicePluginServer Interface as seen here:
-//     https://github.com/kubernetes/kubelet/blob/v0.34.3/pkg/apis/deviceplugin/v1beta1/api_grpc.pb.go#L264
+//
+//	https://github.com/kubernetes/kubelet/blob/v0.34.3/pkg/apis/deviceplugin/v1beta1/api_grpc.pb.go#L264
 //
 // Conceptual documentation for device plugins can be found on the kubernetes docs:
-// 		 https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-implementation
+//
+//	https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-implementation
 //
 // Lastly, the original design doc can be of benefit when conceptualizing the operational flow of a device plugin:
-//     https://github.com/kubernetes/design-proposals-archive/blob/main/resource-management/device-plugin.md
+//
+//	https://github.com/kubernetes/design-proposals-archive/blob/main/resource-management/device-plugin.md
 type DevicePlugin struct {
 	pluginapi.UnimplementedDevicePluginServer
 
@@ -146,13 +149,14 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 
 	req := &pluginapi.RegisterRequest{
 		Version:      pluginapi.Version,
-		Endpoint:     kubeletEndpoint,
+		Endpoint:     dp.socket,
 		ResourceName: fmt.Sprintf("%s/n150", resourceDomain),
 	}
 
 	klog.Infof("Registering with kubelet on endpoint %s", req.Endpoint)
 	klog.Infof("Registering resource %s", req.ResourceName)
 	klog.Infof("Registering with device plugin API version %s", req.Version)
+
 	_, err = client.Register(context.Background(), req)
 	if err != nil {
 		return fmt.Errorf("failed to register with kubelet: %v", err)
