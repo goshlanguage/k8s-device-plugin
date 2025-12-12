@@ -163,16 +163,11 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 
 // dial is a helper function that establishes gRPC communication with the kubelet
 func (dp *DevicePlugin) dial() (*grpc.ClientConn, error) {
-	connectParams := grpc.ConnectParams{
-		MinConnectTimeout: 5 * time.Second,
-	}
-
 	kubeletSocketEndpoint := fmt.Sprintf("unix://%s", pluginapi.KubeletSocket)
 
 	conn, err := grpc.NewClient(
 		kubeletSocketEndpoint,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithConnectParams(connectParams),
 	)
 	if err != nil {
 		return nil, err
