@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path"
+	"path/filepath"
 	"time"
 
 	"google.golang.org/grpc"
 
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	status "google.golang.org/grpc/status"
 	"k8s.io/klog/v2"
@@ -31,7 +32,6 @@ const (
 //	https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-implementation
 //
 // Lastly, the original design doc can be of benefit when conceptualizing the operational flow of a device plugin:
-//
 //	https://github.com/kubernetes/design-proposals-archive/blob/main/resource-management/device-plugin.md
 type DevicePlugin struct {
 	pluginapi.UnimplementedDevicePluginServer
@@ -52,7 +52,7 @@ func NewDevicePlugin() *DevicePlugin {
 			{ID: "2", Health: pluginapi.Healthy},
 			{ID: "3", Health: pluginapi.Healthy},
 		},
-		socket: path.Join(pluginapi.DevicePluginPath, socketName),
+		socket: socketName,
 	}
 }
 
@@ -119,27 +119,40 @@ func (dp *DevicePlugin) PreStartContainer(context.Context, *pluginapi.PreStartCo
 
 // Start initiates the gRPC server for the device plugin
 func (dp *DevicePlugin) Start() error {
-	// Remove if exists
-	os.Remove(dp.socket)
+	fullSocketPath := filepath.Join(pluginapi.DevicePluginPath, "tenstorrent.sock")
+  
+  // Clean up
+  os.Remove(fullSocketPath)
 
 	// Start gRPC server
-	sock, err := net.Listen("unix", dp.socket)
+	sock, err := net.Listen("unix", fullSocketPath)
 	if err != nil {
 		return fmt.Errorf("failed to listen on socket: %v", err)
 	}
 
-	klog.Infof("gRPC socket established at %s", dp.socket)
+	klog.Infof("gRPC server socket established at %s", fullSocketPath)
 
 	grpcServer := grpc.NewServer()
 	pluginapi.RegisterDevicePluginServer(grpcServer, dp)
 
-	go grpcServer.Serve(sock)
+	go func() {
+		if err := grpcServer.Serve(sock); err != nil {
+			klog.Fatalf("gRPC Serve failed: %v", err)
+		}
+	}()
+
+	// dummy wait
+	//    hoping that the grpc server has acquired the lock in this time before kubelet calls back
+	time.Sleep(1 * time.Second)
 
 	return dp.Register(pluginapi.KubeletSocket)
 }
 
 func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
-	conn, err := dp.dial()
+	ctx, cancel := context.WithTimeout(context.Background(), 5 * time.Second)
+	defer cancel()
+
+	conn, err := dp.dial(ctx)
 	if err != nil {
 		return err
 	}
@@ -166,8 +179,10 @@ func (dp *DevicePlugin) Register(kubeletEndpoint string) error {
 }
 
 // dial is a helper function that establishes gRPC communication with the kubelet
-func (dp *DevicePlugin) dial() (*grpc.ClientConn, error) {
+func (dp *DevicePlugin) dial(ctx context.Context) (*grpc.ClientConn, error) {
 	kubeletSocketEndpoint := fmt.Sprintf("unix://%s", pluginapi.KubeletSocket)
+	
+	klog.Infof("Dialing kubelet socket: %s", kubeletSocketEndpoint)
 
 	conn, err := grpc.NewClient(
 		kubeletSocketEndpoint,
@@ -175,6 +190,21 @@ func (dp *DevicePlugin) dial() (*grpc.ClientConn, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	// Attempt to connect
+	conn.Connect()
+
+	// Explicitly block until READY or context deadline
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			break
+		}
+
+		if !conn.WaitForStateChange(ctx, state) {
+			return nil, fmt.Errorf("gRPC connection timeout, last state: %s", state)
+		}
 	}
 
 	klog.Infof("grpc connection created with endpoint %s", kubeletSocketEndpoint)
