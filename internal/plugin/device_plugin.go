@@ -37,8 +37,14 @@ type DevicePlugin struct {
 	pluginapi.UnimplementedDevicePluginServer
 
 	ctx     context.Context
+	// devices represent the currently discovered tenstorrent devices
 	devices []*pluginapi.Device
+	// resourceName represents the card(s) discovered, eg: n150 or n300
+	resourceName string
+	// socket represents the device plugin socket the kubelet will communicate with
 	socket  string
+	// socketDir is the directory where sockets are created (default: /var/lib/kubelet/device-plugins)
+	socketDir  string
 }
 
 // NewDevicePlugin should enumerate a hosts' tenstorrent devices
@@ -53,6 +59,7 @@ func NewDevicePlugin() *DevicePlugin {
 			{ID: "3", Health: pluginapi.Healthy},
 		},
 		socket: socketName,
+		socketDir: pluginapi.DevicePluginPath,
 	}
 }
 
@@ -119,7 +126,7 @@ func (dp *DevicePlugin) PreStartContainer(context.Context, *pluginapi.PreStartCo
 
 // Start initiates the gRPC server for the device plugin
 func (dp *DevicePlugin) Start() error {
-	fullSocketPath := filepath.Join(pluginapi.DevicePluginPath, "tenstorrent.sock")
+	fullSocketPath := filepath.Join(dp.socketDir, dp.socket)
   
   // Clean up
   os.Remove(fullSocketPath)
