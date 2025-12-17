@@ -4,6 +4,8 @@ kind: Pod
 metadata:
   name: tt-metal-dev
 spec:
+  imagePullSecrets:
+    - name: regcred
   containers:
     - name: tt-metal-dev
       image: ghcr.io/tenstorrent/tt-metal/tt-metalium/ubuntu-22.04-dev-amd64:latest
@@ -11,3 +13,11 @@ spec:
       resources:
         limits:
           tenstorrent.com/n150: 1
+          hugepages-1Gi: 2Gi
+  volumeMounts:
+    - mountPath: /hugepages
+      name: hugepage
+  volumes:
+    - name: hugepage
+      emptyDir:
+        medium: HugePages

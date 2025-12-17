@@ -69,11 +69,16 @@ func (dp *DevicePlugin) GetDevicePluginOptions(context.Context, *pluginapi.Empty
 // returns the new list
 func (dp *DevicePlugin) ListAndWatch(e *pluginapi.Empty, stream pluginapi.DevicePlugin_ListAndWatchServer) error {
 	for {
-		klog.Info("ListAndWatch: sending device list")
+		klog.Info("ListAndWatch: sending initial device list")
 		if err := stream.Send(&pluginapi.ListAndWatchResponse{Devices: dp.devices}); err != nil {
 			return err
 		}
-		time.Sleep(5 * time.Second)
+
+		// TODO: ideally we would use a channel (dp.updateCh) here 
+		// to trigger sends only when hardware health changes.
+		// For now, we just block to keep the stream open.
+		<-dp.ctx.Done()
+		return nil
 	}
 }
 
@@ -90,26 +95,31 @@ func (dp *DevicePlugin) GetPreferredAllocation(context.Context, *pluginapi.Prefe
 // Plugin can run device specific operations and instruct Kubelet
 // of the steps to make the Device available in the container
 func (dp *DevicePlugin) Allocate(ctx context.Context, req *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	devs := []*pluginapi.DeviceSpec{
-		{
-			HostPath:      "/dev/tenstorrent",
-			ContainerPath: "/dev/tenstorrent",
-			Permissions:   "rw",
-		},
+	klog.Infof("Received Allocate request for %v", req.ContainerRequests)	
+
+	response := pluginapi.AllocateResponse{}
+
+	for _, req := range req.ContainerRequests {
+		var devices []*pluginapi.DeviceSpec
+		
+		for _, id := range req.DevicesIds {		
+			devPath := fmt.Sprintf("/dev/tenstorrent/%s", id)
+
+			klog.Infof("Allocating: %s", devPath)
+
+			devices = append(devices, &pluginapi.DeviceSpec{
+				HostPath:      devPath,
+				ContainerPath: devPath,
+				Permissions:   "rw",
+			})
+		}
+
+		response.ContainerResponses = append(response.ContainerResponses, &pluginapi.ContainerAllocateResponse{
+			Devices: devices,
+		})
 	}
 
-	resp := &pluginapi.AllocateResponse{
-		ContainerResponses: []*pluginapi.ContainerAllocateResponse{
-			{
-				Envs: map[string]string{
-					"TT_VISIBLE_DEVICES": req.ContainerRequests[0].DevicesIds[0],
-				},
-				Devices: devs,
-			},
-		},
-	}
-
-	return resp, nil
+	return &response, nil
 }
 
 // PreStartContainer is called, if indicated by Device Plugin during registration phase,
