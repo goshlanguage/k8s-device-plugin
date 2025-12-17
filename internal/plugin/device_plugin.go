@@ -29,7 +29,7 @@ const (
 //
 // Conceptual documentation for device plugins can be found on the kubernetes docs:
 //
-//	https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-implementation
+//	https://kubernetes.kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-implementation
 //
 // Lastly, the original design doc can be of benefit when conceptualizing the operational flow of a device plugin:
 //	https://github.com/kubernetes/design-proposals-archive/blob/main/resource-management/device-plugin.md
@@ -49,15 +49,10 @@ type DevicePlugin struct {
 
 // NewDevicePlugin should enumerate a hosts' tenstorrent devices
 // TODO: Remove this stub
-func NewDevicePlugin() *DevicePlugin {
+func NewDevicePlugin(resourceName string, devices []*pluginapi.Device) *DevicePlugin {
 	return &DevicePlugin{
 		ctx: context.Background(),
-		devices: []*pluginapi.Device{
-			{ID: "0", Health: pluginapi.Healthy},
-			{ID: "1", Health: pluginapi.Healthy},
-			{ID: "2", Health: pluginapi.Healthy},
-			{ID: "3", Health: pluginapi.Healthy},
-		},
+		devices: devices,
 		socket: socketName,
 		socketDir: pluginapi.DevicePluginPath,
 	}
