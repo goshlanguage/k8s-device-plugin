@@ -48,9 +48,14 @@ func discoverAndStartPlugins() {
 		})
 	}
 
+	klog.Infof("Discovered %v devices: %v", len(devices), devices)
+
 	for resourceName, devs := range devices {
 		dp := plugin.NewDevicePlugin(resourceName, devs)
+		
 		go func(dp *plugin.DevicePlugin) {
+			klog.Infof("Starting device plugin for resource %s", resourceName)
+
 			if err := dp.Start(); err != nil {
 				klog.Fatalf("Error starting device plugin: %v", err)
 			}
