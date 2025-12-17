@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/goshlanguage/k8s-device-plugin/internal/plugin"
 	"k8s.io/klog/v2"
@@ -14,7 +16,11 @@ import (
 
 func main() {
 	discoverAndStartPlugins()
-	select {} // block forever
+
+	// Block until a signal is received.
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	<-sig
 }
 
 // discoverAndStartPlugins iterates through the devie nodes to discover installed cards
@@ -29,7 +35,7 @@ func discoverAndStartPlugins() {
 
 	for _, file := range files {
 		deviceID := filepath.Base(file)
-		cardTypePath := fmt.Sprintf("/sys/class/tenstorrent/tenstorrent%s/tt_card_type", deviceID)
+		cardTypePath := fmt.Sprintf("/sys/class/tenstorrent/tenstorrent!%s/tt_card_type", deviceID)
 
 		file, err := os.Open(cardTypePath)
 		if err !=nil {
