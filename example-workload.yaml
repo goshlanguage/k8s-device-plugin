@@ -14,10 +14,13 @@ spec:
         limits:
           tenstorrent.com/n150: 1
           hugepages-1Gi: 2Gi
-  volumeMounts:
-    - mountPath: /hugepages
-      name: hugepage
+          cpu: 2
+          memory: 8Gi
+      volumeMounts:
+        - mountPath: /dev/hugepages-1G
+          name: hugepage
   volumes:
     - name: hugepage
-      emptyDir:
-        medium: HugePages
+      hostPath:
+        path: /dev/hugepages
+        type: Directory

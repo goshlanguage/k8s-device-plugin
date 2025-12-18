@@ -11,6 +11,13 @@ WARNING: This is in active development and is not complete. In the meantime, I s
 To use this device plugin, you must first have already installed `tt-kmd` on the kubernetes hosts.
 See [github.com/tenstorrent/tt-kmd](http://github.com/tenstorrent/tt-kmd).
 
+Be sure that hugepages are enabled and configured in your card hosts. You can confirm this with:
+
+```sh
+sudo cat /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages
+2
+```
+
 ## Getting Started
 
 You can deploy the tenstorrent `k8s-device-plugin` in kind by running:

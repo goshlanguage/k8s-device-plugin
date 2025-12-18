@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -48,7 +47,6 @@ type DevicePlugin struct {
 }
 
 // NewDevicePlugin should enumerate a hosts' tenstorrent devices
-// TODO: Remove this stub
 func NewDevicePlugin(resourceName string, devices []*pluginapi.Device) *DevicePlugin {
 	return &DevicePlugin{
 		ctx: context.Background(),
@@ -132,9 +130,6 @@ func (dp *DevicePlugin) PreStartContainer(context.Context, *pluginapi.PreStartCo
 // Start initiates the gRPC server for the device plugin
 func (dp *DevicePlugin) Start() error {
 	fullSocketPath := filepath.Join(dp.socketDir, dp.socket)
-  
-  // Clean up
-  os.Remove(fullSocketPath)
 
 	// Start gRPC server
 	sock, err := net.Listen("unix", fullSocketPath)
