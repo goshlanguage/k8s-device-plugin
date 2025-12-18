@@ -18,6 +18,7 @@ import (
 )
 
 const (
+	grpcServerStartTimeout = 10 * time.Second
 	resourceDomain = "tenstorrent.com"
 	socketName     = "tenstorrent.sock"
 )
@@ -148,9 +149,10 @@ func (dp *DevicePlugin) Start() error {
 		}
 	}()
 
-	// dummy wait
-	//    hoping that the grpc server has acquired the lock in this time before kubelet calls back
-	time.Sleep(1 * time.Second)
+	// BLOCK until the server is actually reachable
+	if err := dp.waitForServer(fullSocketPath, grpcServerStartTimeout); err != nil {
+			return fmt.Errorf("gRPC server failed to start: %v", err)
+	}
 
 	return dp.Register(pluginapi.KubeletSocket)
 }
@@ -218,4 +220,37 @@ func (dp *DevicePlugin) dial(ctx context.Context) (*grpc.ClientConn, error) {
 	klog.Infof("grpc state %s", conn.GetState().String())
 
 	return conn, nil
+}
+
+// waitForServer blocks until the gRPC server is ready to accept connections
+func (dp *DevicePlugin) waitForServer(socketPath string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	conn, err := grpc.NewClient("unix://"+socketPath,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return err
+	}
+
+	defer conn.Close()
+
+	conn.Connect()
+	
+	// We connected successfully, close this test connection
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+
+		// WaitForStateChange blocks until the state changes from 'state'
+		// Returns false if the context expires
+		if !conn.WaitForStateChange(ctx, state) {
+			return ctx.Err()
+		}
+	}
+
+	return nil
 }
