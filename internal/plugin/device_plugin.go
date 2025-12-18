@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -131,6 +132,9 @@ func (dp *DevicePlugin) PreStartContainer(context.Context, *pluginapi.PreStartCo
 // Start initiates the gRPC server for the device plugin
 func (dp *DevicePlugin) Start() error {
 	fullSocketPath := filepath.Join(dp.socketDir, dp.socket)
+
+	// Clean up
+  os.Remove(fullSocketPath)
 
 	// Start gRPC server
 	sock, err := net.Listen("unix", fullSocketPath)
