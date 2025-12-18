@@ -16,6 +16,8 @@ spec:
       tolerations:
       - key: CriticalAddonsOnly
         operator: Exists
+      imagePullSecrets: 
+      - name: regcred
       containers:
       - name: dp
         image: ghcr.io/goshlanguage/k8s-device-plugin:latest

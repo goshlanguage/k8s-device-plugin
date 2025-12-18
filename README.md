@@ -11,12 +11,26 @@ WARNING: This is in active development and is not complete. In the meantime, I s
 To use this device plugin, you must first have already installed `tt-kmd` on the kubernetes hosts.
 See [github.com/tenstorrent/tt-kmd](http://github.com/tenstorrent/tt-kmd).
 
+Be sure that hugepages are enabled and configured in your card hosts. You can confirm this with:
+
+```sh
+sudo cat /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages
+2
+```
+
 ## Getting Started
 
 You can deploy the tenstorrent `k8s-device-plugin` in kind by running:
 
 ```sh
 kind create cluster -f kind.yaml
+
+# Login to GHCR to avoid issues with transparent reads
+# docker login ghcr.io
+
+# Create a registry pull secret if you have issues with transparent pulls from GHCR
+kubectl create secret generic regcred -n kube-system \
+  --from-file=.dockerconfigjson=$HOME/.docker/config.json --type=kubernetes.io/dockerconfigjson
 
 kubectl apply -f device-plugin-daemonset.yaml
 ```
@@ -38,6 +52,7 @@ kubectl get no kind-control-plane -o json | jq '.status.allocatable'
 With the plugin deployed, and devices showing up as allocatable, you can then schedule an example workload:
 
 ```sh
+# You may need to create an image pull secret if you experience issues with transparent pulls from GHCR
 kubectl apply -f example-workload.yaml
 ```
 
@@ -67,17 +82,6 @@ sequenceDiagram
 
     Kubelet->>Pod: 5. Start container with allocated devices
 ```
-
-## Roadmap
-
-- [ ] Enumerate the hardware
-  - [x] a fake list at first
-  - [ ] actual hardware
-- [x] Implement the gRPC server for the Kubernetes Device Plugin API
-  - [x] [Register](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#device-plugin-registration)
-  - [x] Register with kubelet via the Unix socket
-- [ ] Return something valid from `Allocate()` ()
-- [ ] Test E2E ([see Example](https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/device-plugins/#example-pod))
 
 ## Reference
 

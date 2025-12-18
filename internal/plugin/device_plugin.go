@@ -19,6 +19,7 @@ import (
 )
 
 const (
+	grpcServerStartTimeout = 10 * time.Second
 	resourceDomain = "tenstorrent.com"
 	socketName     = "tenstorrent.sock"
 )
@@ -48,7 +49,6 @@ type DevicePlugin struct {
 }
 
 // NewDevicePlugin should enumerate a hosts' tenstorrent devices
-// TODO: Remove this stub
 func NewDevicePlugin(resourceName string, devices []*pluginapi.Device) *DevicePlugin {
 	return &DevicePlugin{
 		ctx: context.Background(),
@@ -69,11 +69,16 @@ func (dp *DevicePlugin) GetDevicePluginOptions(context.Context, *pluginapi.Empty
 // returns the new list
 func (dp *DevicePlugin) ListAndWatch(e *pluginapi.Empty, stream pluginapi.DevicePlugin_ListAndWatchServer) error {
 	for {
-		klog.Info("ListAndWatch: sending device list")
+		klog.Info("ListAndWatch: sending initial device list")
 		if err := stream.Send(&pluginapi.ListAndWatchResponse{Devices: dp.devices}); err != nil {
 			return err
 		}
-		time.Sleep(5 * time.Second)
+
+		// TODO: ideally we would use a channel (dp.updateCh) here 
+		// to trigger sends only when hardware health changes.
+		// For now, we just block to keep the stream open.
+		<-dp.ctx.Done()
+		return nil
 	}
 }
 
@@ -90,26 +95,31 @@ func (dp *DevicePlugin) GetPreferredAllocation(context.Context, *pluginapi.Prefe
 // Plugin can run device specific operations and instruct Kubelet
 // of the steps to make the Device available in the container
 func (dp *DevicePlugin) Allocate(ctx context.Context, req *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
-	devs := []*pluginapi.DeviceSpec{
-		{
-			HostPath:      "/dev/tenstorrent",
-			ContainerPath: "/dev/tenstorrent",
-			Permissions:   "rw",
-		},
+	klog.Infof("Received Allocate request for %v", req.ContainerRequests)	
+
+	response := pluginapi.AllocateResponse{}
+
+	for _, req := range req.ContainerRequests {
+		var devices []*pluginapi.DeviceSpec
+		
+		for _, id := range req.DevicesIds {		
+			devPath := fmt.Sprintf("/dev/tenstorrent/%s", id)
+
+			klog.Infof("Allocating: %s", devPath)
+
+			devices = append(devices, &pluginapi.DeviceSpec{
+				HostPath:      devPath,
+				ContainerPath: devPath,
+				Permissions:   "rw",
+			})
+		}
+
+		response.ContainerResponses = append(response.ContainerResponses, &pluginapi.ContainerAllocateResponse{
+			Devices: devices,
+		})
 	}
 
-	resp := &pluginapi.AllocateResponse{
-		ContainerResponses: []*pluginapi.ContainerAllocateResponse{
-			{
-				Envs: map[string]string{
-					"TT_VISIBLE_DEVICES": req.ContainerRequests[0].DevicesIds[0],
-				},
-				Devices: devs,
-			},
-		},
-	}
-
-	return resp, nil
+	return &response, nil
 }
 
 // PreStartContainer is called, if indicated by Device Plugin during registration phase,
@@ -122,8 +132,8 @@ func (dp *DevicePlugin) PreStartContainer(context.Context, *pluginapi.PreStartCo
 // Start initiates the gRPC server for the device plugin
 func (dp *DevicePlugin) Start() error {
 	fullSocketPath := filepath.Join(dp.socketDir, dp.socket)
-  
-  // Clean up
+
+	// Clean up
   os.Remove(fullSocketPath)
 
 	// Start gRPC server
@@ -143,9 +153,10 @@ func (dp *DevicePlugin) Start() error {
 		}
 	}()
 
-	// dummy wait
-	//    hoping that the grpc server has acquired the lock in this time before kubelet calls back
-	time.Sleep(1 * time.Second)
+	// BLOCK until the server is actually reachable
+	if err := dp.waitForServer(fullSocketPath, grpcServerStartTimeout); err != nil {
+			return fmt.Errorf("gRPC server failed to start: %v", err)
+	}
 
 	return dp.Register(pluginapi.KubeletSocket)
 }
@@ -213,4 +224,37 @@ func (dp *DevicePlugin) dial(ctx context.Context) (*grpc.ClientConn, error) {
 	klog.Infof("grpc state %s", conn.GetState().String())
 
 	return conn, nil
+}
+
+// waitForServer blocks until the gRPC server is ready to accept connections
+func (dp *DevicePlugin) waitForServer(socketPath string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	conn, err := grpc.NewClient("unix://"+socketPath,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		return err
+	}
+
+	defer conn.Close()
+
+	conn.Connect()
+	
+	// We connected successfully, close this test connection
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+
+		// WaitForStateChange blocks until the state changes from 'state'
+		// Returns false if the context expires
+		if !conn.WaitForStateChange(ctx, state) {
+			return ctx.Err()
+		}
+	}
+
+	return nil
 }
